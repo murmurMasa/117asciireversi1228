@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>リバーシ</title>
+<script>
+var canvas, context, canvasRect;                //キャンバス
+var message, status;                            //メッセージ、ステータス
+var playerNo = 0;                               //0:black 1:white
+var color = [["black", "黒"], ["white", "白"]]; //石の色
+var board = new Array(8);                       //盤の情報
+var cnt = new Array(8), check = new Array(8);   //方向別カウンター、チェック
+var d = [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]];   //方向
+
+function init() {
+    //キャンバスの取得
+    canvas = document.getElementById("game");           //キャンバスのＩＤ
+    context = canvas.getContext("2d");
+    canvasRect = canvas.getBoundingClientRect();        //キャンバスの矩形情報を取得
+    //メッセージ
+    message = document.getElementById("message");       //メッセージ表示エリアのID
+    //盤情報の初期化
+    for (var i=0; i<8; i++) {
+        board[i] = [-1, -1, -1, -1, -1, -1, -1, -1];    //boardは8x8の二次元配列　初期値の-1は盤に何もない状態
+    }
+    //盤の初期描画
+    drawBoard();
+}
+
+function drawBoard() {
+    context.fillStyle = "#006600";                          //塗りつぶし色　濃い緑
+    context.fillRect(0, 0, canvas.width, canvas.height);    //キャンバスを塗りつぶす
+    //枠の描画
+    context.beginPath();                //マス目の縦横線を描く（線の間隔は80px)
+    for (var i=0; i<9; i++) {
+        context.moveTo(i*80, 0);
+        context.lineTo(i*80, 640);
+        context.moveTo(0, i*80);
+        context.lineTo(640, i*80);
+    }
+    context.stroke();
+    //石の描画
+    for (var x=0; x<8; x++) {                               //8x8の配列を走査
+        for (var y=0; y<8; y++) {
+            if (board[x][y] >= 0) {
+                context.fillStyle = color[board[x][y]][0];  //配列boardの値が0なら黒、1なら白
+                context.beginPath();
+                context.arc(40+x*80, 40+y*80, 30, 0, 2*Math.PI);    //半径30pxの円のパスを作る
+                context.fill();                                     //円を指定色で塗りつぶす
+                context.stroke();                                   //円をデフォルト色（黒）で描く
+            }
+        }
+    }
+}
+
+function startGame() {                              //スタートボタンをクリックしたとき
+    //盤情報の初期化
+    for (var i=0; i<8; i++) {
+        board[i] = [-1, -1, -1, -1, -1, -1, -1, -1];
+    }
+    //最初の石
+    board[3][4] = 0;
+    board[4][3] = 0;
+    board[3][3] = 1;
+    board[4][4] = 1;
+    //盤の描画
+    drawBoard();
+    //ゲーム開始
+    status = "start";
+    playerNo = 0;                                   //PlayerNoは0（人間）
+    message.innerText = "黒の石を置いてください。";
+}
+
+function putDiscPlayer(event) {
+    //石の配置
+    var x = Math.floor((event.clientX-canvasRect.left)/80);     //マウスカーソルの座標から盤上の位置（０～７）を計算
+    var y = Math.floor((event.clientY-canvasRect.top)/80);
+    putDisc(x, y, 0);
+}
+
+function putDisc(x, y, pNo) {
+    if (checkDisc(x, y)&&(playerNo == pNo)) {                   //返せる石があるとき
+        //石を置く
+        board[x][y] = playerNo;
+        //ひっくり返す
+        for (var i=0; i<8; i++) {                               //調べる方向（8方向)
+            if (cnt[i] > 0) flipDisc(x+d[i][0], y+d[i][1], i);  //その方向に返せる石があるなら裏返す(flipDisc関数を実行)
+        }
+        //盤の描画
+        drawBoard();
+        //交代
+        changePlayer();
+    }
+}
+
+function checkDisc(x, y) {
+    //石の配置チェック（８方向）
+    for (var i=0; i<8; i++) {                                   //調べる方向（８方向）
+        cnt[i] = 0;
+        check[i] = 0;
+        if (board[x][y] == -1) checkDirDisc(x+d[i][0], y+d[i][1], i);   //その方向に石がないならその先を調べる
+        if (check[i] == 0) cnt[i] = 0;                                  //その方向に自分の石がないならカウンターをクリア
+    }
+    var ret = false;
+    if (Math.max.apply(null, cnt) > 0) ret = true;
+    return ret;                                                         //返せる石があったとき　true　なかったときfalse
+}
+
+function checkDirDisc(x, y, dir) {                                      //dirは調べる方向
+    //石に配置チェック（方向別）
+    if ((x >= 0)&&(x < 8)&&(y >= 0)&&(y < 8)) {                         //盤の範囲内なら
+        if (board[x][y] == playerNo) {                                  //自分の石があったとき
+            //自分の石
+            check[dir] = 1;
+        } else if (board[x][y] == 1-playerNo) {                         //相手の石があったとき
+            //次の石をチェック
+            cnt[dir]++;                                                 //カウンターをひとつ増やす
+            checkDirDisc(x+d[dir][0], y+d[dir][1], dir);                //再帰的に同じ方向を調べる
+        }
+    }
+}
+
+function flipDisc(x, y, dir) {
+    //石をひっくり返す
+    if (board[x][y] == 1-playerNo) {                                    //相手の石なら
+        //ひっくり返す
+        board[x][y] = playerNo;                                         //石を裏返す（自分の石にする）
+        //次の石
+        flipDisc(x+d[dir][0], y+d[dir][1], dir);                        //再帰的に同じ方向の石を裏返す
+    }
+}
+
+function checkNoPlace() {
+    //石の配置可能場所をチェック
+    var ret = true;
+    for (var x=0; x<8; x++) {                       //8x8の配列を走査
+        for (var y=0; y<8; y++) {
+            if (checkDisc(x, y)) ret = false;       //裏返せる石があったら　false
+        }
+    }
+    return ret;                                     //裏返せる石がなかったら　true
+}
+
+function changePlayer() {
+    //交代
+    playerNo = 1 - playerNo;                        //PlayerNoを0←→1交互に変更
+    if (checkNoPlace()) {                           //どこにもおけないなら
+        //交代
+        playerNo = 1 - playerNo;
+        if (checkNoPlace()) status = "end";
+    }
+    message.innerText = color[playerNo][1]+"の石を置いてください。";
+    //終了
+    if (status == "end") {
+        //黒石と白石の数
+        var black = 0, white = 0;
+        for (var x=0; x<8; x++) {
+            for (var y=0; y<8; y++) {
+                if (board[x][y] == 0) black++;          //黒石の数を数える
+                if (board[x][y] == 1) white++;          //白石の数を数える
+            }
+        }
+        message.innerText = "終了！　黒："+black+" 白："+white;
+    } else if (playerNo == 1) {                         //statusがendではなく、コンピュータの手番のとき
+        //コンピュータの手
+        setTimeout(putDiscCom, 1000)                    //1秒後にputDiscCom関数を実行
+    }
+}
+
+function putDiscCom() {
+    //コンピュータの手
+    var mx, my, max = 0;
+    for (var x=0; x<8; x++) {
+        for (var y=0; y<8; y++) {
+            if (checkDisc(x, y)) {                      //裏返せる石があったとき
+                var total = 0, bonus = 5;
+                for (var i=0; i<8; i++) {
+                    total += cnt[i];                    //そのマスに置くと裏返せる石の合計値
+                }
+                //ボーナス
+                if ((x==0)&&(y!=1)&&(y!=6)) bonus += 5; //端の列でカドの隣のマスでないときボーナス＋５点
+                if ((x==7)&&(y!=1)&&(y!=6)) bonus += 5;
+                if ((y==0)&&(x!=1)&&(y!=6)) bonus += 5;
+                if ((y==7)&&(x!=1)&&(y!=6)) bonus += 5;
+                if ((x==1)&&((y==1)||(y==6))) bonus -= 5;   //カドの内側のマスのときボーナスー５点
+                if ((x==6)&&((y==1)||(y==6))) bonus -= 5;
+                //石の数＋ボーナスが最大の場所
+                if (max < total+bonus) {                    //裏返せる石の合計値＋ボーナスがこれまでの最大のとき
+                    max = total+bonus;                      //最大値を更新
+                    mx = x;                                 //そのマスの位置を保存
+                    my = y;
+                }
+            }
+        }
+    }
+    //石の配置
+    putDisc(mx, my, 1);
+}
+</script>
+</head>
+<body onload="init()">
+<p>リバーシ</p>
+<input type="button" id="start" value="スタート" onclick="startGame()">
+<span id="message"></span>
+<hr>
+<canvas id="game" width="640" height="640" onmousedown="putDiscPlayer(event)">
+</canvas>
+</body>
+</html>
